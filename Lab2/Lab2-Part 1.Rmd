@@ -1,0 +1,138 @@
+---
+title: "Lab2-Part 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+=================
+Part 1 a of Lab2 
+=================
+
+```{r}
+###############################################
+# Load EPI Data
+EPI_data <- read.csv("EPI_data.csv")
+
+attach(EPI_data)
+fix(EPI_data)
+
+EPI <- EPI_data$EPI
+
+tf <- is.na(EPI) # Drop Null
+E <- EPI[!tf]
+
+###############################################
+# Load 2010 EPI Data
+EPI_data_2010 <- read.csv("2010EPI_data.csv", skip = 1)
+
+attach(EPI_data_2010)
+fix(EPI_data_2010)
+
+EPI2010 <- EPI_data_2010$EPI
+
+tf10 <- is.na(EPI)
+E10 <- EPI2010[!tf10]
+```
+```{r}
+###############################################
+# Measures of Central Tendency for EPI data set
+Mode <- function(x) {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+}
+
+epiMean <- mean(E)
+epiMedian <- median(E)
+epiMode <- Mode(E)
+
+print(epiMean)
+print(epiMedian)
+print(epiMode)
+```
+```{r}
+###############################################
+# Generate Histograms for EPI 2010 data set
+
+# Hist for EPI
+hist(E10)
+
+# Hist for DALY
+DALY2010 <- EPI_data_2010$DALY
+DALY <- DALY2010[!tf10D]
+
+hist(DALY)
+
+###############################################
+# Box plot and Q-Q
+envhealth2010 <- EPI_data_2010$ENVHEALTH
+ENVHEALTH <- envhealth2010
+
+ecosystem2010 <- EPI_data_2010$ECOSYSTEM
+ECOSYSTEM <- ecosystem2010
+
+# Generate Box plot
+boxplot(ENVHEALTH, ECOSYSTEM)
+
+# Generate Q-Q plot
+qqplot(ENVHEALTH, ECOSYSTEM)
+```
+
+=================
+Part 1 b of Lab2
+=================
+
+```{r}
+###############################################
+# Part 1b
+###############################################
+# Get ENVHEALTH, DALY, AIR_H ,and WATER_H
+ENVHEALTH <- EPI_data$ENVHEALTH
+DALY <- EPI_data$DALY
+AIR_H <- EPI_data$AIR_H
+WATER_H <- EPI_data$WATER_H
+```
+
+```{r}
+# Linear and least-squares
+boxplot(ENVHEALTH,DALY,AIR_H,WATER_H)
+
+lmENVH <- lm(ENVHEALTH~DALY+AIR_H+WATER_H)
+lmENVH
+summary(lmENVH)
+
+cENVH <-coef(lmENVH)
+
+# Predict
+DALYNEW <- c(seq(5, 95, 5))
+AIR_HNEW <- c(seq(5, 95, 5))
+WATER_HNEW <- c(seq(5, 95, 5))
+
+NEW <- data.frame(DALYNEW, AIR_HNEW, WATER_HNEW)
+pENV <- predict(lmENVH, NEW, interval="prediction")
+cENV <- predict(lmENVH, NEW, interval="confidence")
+```
+```{r}
+# Repeating Experiment or AIR_E and CLIMATE
+AIR_E <- EPI_data$AIR_E
+CLIMATE <- EPI_data$CLIMATE
+
+boxplot(ENVHEALTH, DALY, AIR_E, CLIMATE)
+
+lmREPEAT <- lm(ENVHEALTH~DALY+AIR_E+CLIMATE)
+
+lmREPEAT
+summary(lmREPEAT)
+
+cREPEAT <-coef(lmREPEAT)
+
+AIR_ENEW <- c(seq(5, 95, 5))
+CLIMATE_NEW <- c(seq(5, 95, 5))
+
+NEWREPEAT <- data.frame(DALYNEW, AIR_ENEW, CLIMATE_NEW)
+pREPEAT <- predict(lmREPEAT, NEWREPEAT, interval="prediction")
+cREPEAT <- predict(lmREPEAT, NEWREPEAT, interval="confidence")
+```
+
