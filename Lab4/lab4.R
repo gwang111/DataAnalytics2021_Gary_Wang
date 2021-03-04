@@ -24,3 +24,11 @@ image(1:10, 1:40, t(data_Matrix)[, nrow(data_Matrix):1])
 
 par(mar=rep(0.2, 4))
 heatmap(data_Matrix)
+
+#Analyzing the patterns
+hh <- hclust(dist(data_Matrix))
+data_Matrix_Ordered <- data_Matrix[hh$order, ]
+par(mfrow = c(1, 3))
+image(1:10, 1:40, t(data_Matrix)[, nrow(data_Matrix):1])
+plot(rowMeans(data_Matrix_Ordered), 40:1, xlab = "The Row Mean", ylab = "Row", pch=19)
+plot(colMeans(data_Matrix_Ordered), xlab = "Column", ylab = "Column Mean", pch = 19)
