@@ -1,0 +1,65 @@
+---
+title: "InClassRandomForest"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("randomForest")
+library(randomForest)
+
+data <- read.csv(file.choose(). header = TRUE)
+head(data1)
+
+colnames(data1) <- c("BuyingPrice", "Maintenance", "NumDoors", "NumPersons", "BootSpace", "Safety", "Condition")
+```
+
+```{r}
+set.seed(100)
+train <- sample(nrow(data1), 0.7*nrow(data1), replace = FALSE)
+TrainSet <- data1[train,]
+ValidSet <- data1[-train, ]
+
+model1 <- randomForest(Condition ~ ., data = TrainSet, importance = TRUE)
+```
+
+```{r}
+model2 <- randomForest(Condition ~ ., data = TrainSet, ntree = 500, mtry = 6, importance = TRUE)
+
+predTrain <- predict(model2, TrainSet, type = "class")
+predValid <- predict(model2, ValidSet, type = "class")
+table(predTrain, TrainSet$Condition)
+table(predValid, ValidSet$Condition)
+```
+
+```{r}
+a = c()
+i = 5
+for (i in 3:9) {
+  model3 <- randomForest(Condition ~ ., data = TrainSet, ntree = 500, mtry = i, importance=TRUE)
+  predValid <- predict(model3, ValidSet, type = "class")
+  a[i-2] = mean(predValid == ValidSet$Condition)
+}
+plot(3:8, a)
+```
+
+```{r}
+library(rpart)
+library(caret)
+library(e1071)
+
+model_dt <- train(Condition ~ ., data=TrainSet, method = "rpart")
+model_dt_1 = predict(model_dt, data = TrainSet)
+table(model_dt_1, TrainSet$Condition)
+mean(model_dt_1 == TrainSet$Condition)
+table(model_dt_1, TrainSet$Condition)
+mean(model_dt_1 == TrainSet$Condition)
+
+model_dt_vs = predict(model_dt, newdata = ValidSet)
+table(model_dt_vs, ValidSet$Condtion)
+mean(model_dt_vs == ValidSet$Condition)
+```
+
