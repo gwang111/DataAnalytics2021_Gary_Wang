@@ -338,14 +338,6 @@ for (weight1 in head(t1[order(-t1)], 5)) {
 ```
 Graphic
 ```{r}
-
-#download.file(toString(playerImgs[1, 2]), 'test.png', mode = "wb")
-#jj <- readPNG("test.png", native=T)
-#jg <- readPNG("test.png", native=T)
-#plot(c(0, 20), c(0, 5), type="n")
-#rasterImage(jj, 0, 2, 5, 4)
-#rasterImage(jj, 5, 2, 10, 4)
-
 xleft <- 0
 xright <- 5
 
