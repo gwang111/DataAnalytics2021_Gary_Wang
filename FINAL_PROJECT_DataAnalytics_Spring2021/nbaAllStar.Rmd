@@ -1,0 +1,399 @@
+---
+title: "All Star or Not"
+author: "Gary Wang"
+date: "4/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Install Necessary Packages
+
+```{r}
+devtools::install_github("abresler/nbastatR")
+```
+
+Import Necessary Packages
+
+```{r}
+library(e1071)
+library(nbastatR)
+library(devtools)
+library(tidyverse)
+library(class)
+library(dplyr)
+library(corrplot)
+library(NeuralNetTools)
+library(neuralnet)
+library(png)
+```
+
+(1) Acquire the Data from nbaStatR and Generate our dataframe of desired stats
+------------------------------------------------------------------------------
+
+```{r}
+pull_stats <- game_logs(seasons = 2020:2021)
+pull_stats2 <- game_logs(seasons = 2021)
+
+select_stats <- data.frame(pull_stats$namePlayer, pull_stats$dateGame, pull_stats$pts, pull_stats$ast, pull_stats$treb, pull_stats$stl, pull_stats$blk, pull_stats$pctFG, 
+                           pull_stats$fta, pull_stats$plusminus, pull_stats$isWin, pull_stats$minutes)
+select_stats2 <- data.frame(pull_stats2$namePlayer, pull_stats2$dateGame, pull_stats2$pts, pull_stats2$ast, pull_stats2$treb, pull_stats2$stl, pull_stats2$blk, pull_stats2$pctFG, 
+                            pull_stats2$fta, pull_stats2$plusminus, pull_stats2$isWin, pull_stats2$minutes)
+playerImgs <- data.frame(pull_stats2$namePlayer, pull_stats2$urlPlayerHeadshot)
+```
+
+(2) Preprocess our data
+  - filter out games that occur after the all-star break
+  - group by player name and average the rest of their stats (now per game avgs)
+  - rename the columns for better readability
+
+As we will have averaged the stats, our column names are on a per game basis
+------------------------------------------------------------------------------
+
+```{r}
+# Get the games played for each player
+add_games_played <- function(games, players, p1, p2) {
+  for (player1 in 1:nrow(players)) {
+    for (player2 in 1:nrow(games)) {
+      if (players[player1, p1] == games[player2, p2]) {
+        players[player1, 'gamesPlayed'] <- games[player2, 'n']
+      }
+    }
+  }
+  return(players)
+}
+
+
+# Let us get only stats before the All Star Break (Before February 20)
+select_stats1 <- select_stats %>% filter(select_stats$pull_stats.dateGame < as.Date('2021-2-28'))
+select_stats_2 <- select_stats2 %>% filter(select_stats2$pull_stats2.dateGame < as.Date('2021-2-28'))
+
+# get games played for each player
+games_played <- select_stats1 %>% count(select_stats1$pull_stats.namePlayer)
+games_played2 <- select_stats_2 %>% count(select_stats_2$pull_stats2.namePlayer)
+
+# Group by player and get their averages
+avg_stats <- data.frame(aggregate(.~ pull_stats.namePlayer, select_stats1, mean))
+avg_stats2 <- data.frame(aggregate(.~ pull_stats2.namePlayer, select_stats_2, mean))
+
+# Add games played to the dataframe
+avg_stats <- add_games_played(games_played, avg_stats, 'pull_stats.namePlayer', 'select_stats1$pull_stats.namePlayer')
+avg_stats2 <- add_games_played(games_played2, avg_stats2, 'pull_stats2.namePlayer', 'select_stats_2$pull_stats2.namePlayer')
+
+avg_stats <- avg_stats[c("pull_stats.namePlayer", "pull_stats.pts", "pull_stats.ast", "pull_stats.treb", "pull_stats.stl", "pull_stats.blk", "pull_stats.pctFG", 
+                         "pull_stats.fta", "pull_stats.plusminus", "pull_stats.isWin", "pull_stats.minutes", "gamesPlayed")]
+avg_stats2 <- avg_stats2[c("pull_stats2.namePlayer", "pull_stats2.pts", "pull_stats2.ast", "pull_stats2.treb", "pull_stats2.stl", "pull_stats2.blk", "pull_stats2.pctFG", 
+                           "pull_stats2.fta", "pull_stats2.plusminus", "pull_stats2.isWin", "pull_stats2.minutes", "gamesPlayed")]
+
+# Rename for better readability
+all_players <- avg_stats %>% rename(
+                    playerName = pull_stats.namePlayer,
+                    ppg = pull_stats.pts,
+                    apg = pull_stats.ast, 
+                    rpg = pull_stats.treb,
+                    spg = pull_stats.stl ,
+                    bpg = pull_stats.blk,
+                    pctFG = pull_stats.pctFG,
+                    ftapg = pull_stats.fta,
+                    pmpg = pull_stats.plusminus,
+                    winPerc = pull_stats.isWin,
+                    mpg = pull_stats.minutes
+                    )
+all_players2 <- avg_stats2 %>% rename(
+                    playerName = pull_stats2.namePlayer,
+                    ppg = pull_stats2.pts,
+                    apg = pull_stats2.ast, 
+                    rpg = pull_stats2.treb,
+                    spg = pull_stats2.stl ,
+                    bpg = pull_stats2.blk,
+                    pctFG = pull_stats2.pctFG,
+                    ftapg = pull_stats2.fta,
+                    pmpg = pull_stats2.plusminus,
+                    winPerc = pull_stats2.isWin,
+                    mpg = pull_stats2.minutes
+                    )
+all_players <- data.frame(all_players)
+all_players2 <- data.frame(all_players2)
+
+all_players
+all_players2
+```
+(3) Let us first analyze the df through Exploratory Data Analysis (EDA)
+```{r}
+par(mfrow=c(3, 2))
+# Let us see the distribution of ppg
+hist(as.numeric(all_players$ppg), xlab = "Points per Game (PPG)", main = "PPG Distribution", breaks = 20)
+# Let us see the distribution of apg
+hist(as.numeric(all_players$apg), xlab = "Assists per Game (APG)", main = "APG Distribution", breaks = 20)
+# Let us see the distribution of rpg
+hist(as.numeric(all_players$rpg), xlab = "Rebounds per Game (RPG)", main = "RPG Distribution", breaks = 20)
+# Let us see the distribution of spg
+hist(as.numeric(all_players$spg), xlab = "Steals per Game (SPG)", main = "SPG Distribution", breaks = 20)
+# Let us see the distribution of bpg
+hist(as.numeric(all_players$bpg), xlab = "Blocks per Game (RPG)", main = "BPG Distribution", breaks = 20)
+```
+MODELS
+------
+
+(4) Model 1 KNN to see if we can classify (All Star/Not All Star) Based off of historical All Star Players
+```{r}
+# The all star roster for the 2019-2020 season
+all_star_roster_2021 <- c('Kevin Durant', 'LeBron James', 'Bradley Beal', 'Giannis Antetokounmpo', 'Kyrie Irving', 'Stephen Curry', 'Kawhi Leonard', 'Luka Doncic',
+                          'Jayson Tatum', 'Zion Williamson', 'Nikola Jokic', 'Mike Conley', 'Jaylen Brown', 'James Harden', 'Paul George', 'Zach LaVine', 'Rudy Gobert',
+                          'Donovan Mitchell', 'Damian Lillard', 'Julius Randle', 'Domantas Sabonis', 'Nikola Vucevic', 'Chris Paul', 'Devin Booker', 'Ben Simmons', 'Anthony Davis', 'Joel Embiid')
+all_star_roster_2020 <- c('Kemba Walker', 'Trae Young', 'Giannis Antetokounmpo', 'Pascal Siakam', 'Joel Embiid', 'Kyle Lowry', 
+                          'Ben Simmons', 'Jimmy Butler', 'Khris Middleton', 'Bam Adebayo', 'Jayson Tatum', 'Domantas Sabonis',
+                          'James Harden', 'Luka Doncic', 'LeBron James', 'Kawhi Leonard', 'Anthony Davis', 'Chris Paul', 'Russell Westbrook', 
+                          'Damian Lillard', 'Donovan Mitchell', 'Brandon Ingram', 'Nikola Jokic', 'Rudy Gobert', 'Devin Booker')
+```
+
+```{r}
+# Identify the true allstars in the 2020 season
+add_all_stars <- function(roster, players) {
+  for (player in 1:nrow(players)) {
+    if (is.element(players[player, 'playerName'], roster)) {
+      players[player, 'AllStar'] <- 1
+    }
+  }
+  return(players)
+}
+
+# Let us use the all star roster to label the our dataframe as either All Star 
+unlabeled <- all_players %>% add_column(AllStar = 0)
+unlabeled2 <- all_players2 %>% add_column(AllStar = 0)
+
+labeled_players <- add_all_stars(all_star_roster_2021, unlabeled)
+labeled_players <- add_all_stars(all_star_roster_2020, labeled_players)
+labeled_players
+
+current_season_set <- add_all_stars(all_star_roster_2021, unlabeled2)
+current_season_set
+```
+All the NBA players in the 2019-2020 season have been labeled as "All Star" or "Not All Star"
+
+Let us display the correlations and the normalize attributes that might skew results but have little correlation with performance attributes (i.e ppg, apg, rpg, etc.)
+```{r}
+par(mfrow=c(1, 2))
+s2 <- cor(labeled_players[, 2:12])
+corrplot(s2, title = "2019-2020 and 2020-2021", mar = c(2, 0, 2, 0))
+
+s1 <- cor(current_season_set[, 2:12])
+corrplot(s1, title = "2020-2021", mar = c(2, 0, 2, 0))
+
+# Let us normalize gamesPlayed (the only non normalized attribute with low correlation to performance attributes)
+labeled_players$gamesPlayed <- labeled_players$gamesPlayed / max(labeled_players$gamesPlayed)
+current_season_set$gamesPlayed <- current_season_set$gamesPlayed / max(current_season_set$gamesPlayed)
+```
+
+Let us now split our dataset into train and test -> 70% 30% split
+```{r}
+# Get our ratio of train to test
+train_size = floor(nrow(labeled_players) * 0.70)
+
+# Sample 75%. Seed so we can reproduce the same samplings
+set.seed(123)
+train_size <- sample(seq_len(nrow(labeled_players)), size = train_size, replace = FALSE)
+
+# Allocate 75% to train and 20% to test
+training_set <- labeled_players[train_size,]
+test_set <- labeled_players[-train_size,]
+```
+
+Lets get an optimal K value for our KNN
+```{r}
+# Drop column with player names
+drop_names <- training_set[, -1]
+# Drop column with labels 
+data_no_labels <- drop_names[, -12]
+
+# Get the label column
+labels <- drop_names[, 12]
+
+# Do the cross validation to find optimal k
+tuning <- tune.knn(data_no_labels, factor(labels), k = 2:100)
+
+plot(tuning)
+```
+```{r}
+cat("Cross Validated Optimal K: ", tuning$best.parameters[1,])
+```
+execute our KNN model
+```{r}
+all_star_tr <- training_set$AllStar
+
+for_training <- training_set[, -1]
+for_training <- for_training[, -12]
+
+for_testing <- test_set[, -1]
+for_testing <- for_testing[, -12]
+
+for_general <- current_season_set[, -1]
+for_general <- for_general[, -12]
+
+train_preds <- knn(train = for_training, test = for_training, cl = all_star_tr, k = tuning$best.parameters)
+test_preds <- knn(train = for_training, test = for_testing, cl = all_star_tr, k = tuning$best.parameters)
+
+full_set_preds <- knn(train = for_training, test = for_general, cl = all_star_tr, k = tuning$best.parameters) 
+
+cat('Training Accuracy: ', mean(train_preds == training_set$AllStar))
+table(train_preds, training_set$AllStar)
+
+cat('Test Accuracy: ', mean(test_preds == test_set$AllStar))
+table(test_preds, test_set$AllStar)
+
+cat('Current Season Accuracy 2020-2021: ', mean(full_set_preds == current_season_set$AllStar))
+table(full_set_preds, current_season_set$AllStar)
+```
+
+Let us filter out and see which all stars were not classified as all stars
+```{r}
+#prune <- labeled_players %>% select(playerName, AllStar)
+prune <- current_season_set
+prune$KNNPrediction <- full_set_preds
+
+# Players that KNN said were not all stars that actually were
+miss_classified <- prune %>% filter(prune$AllStar == 1)
+miss_classified <- miss_classified %>% filter(miss_classified$KNNPrediction == 0)
+miss_classified
+
+# Players that KNN classified as all stars but were not
+snubs <- prune %>% filter(prune$AllStar == 0)
+snubs <- snubs %>% filter(snubs$KNNPrediction == 1)
+snubs
+```
+
+Let us model with an ANN and see if we can get better results
+```{r}
+sign.act.fct <- function(inputs) {
+  return(ifelse(inputs>0.5, 1, 0))
+}
+
+nba_nn <- neuralnet(AllStar ~ ppg + apg + rpg + spg + bpg + pctFG + ftapg + pmpg + winPerc + mpg + gamesPlayed, data=training_set, hidden = 8, act.fct = sigmoid, linear.output = F)
+```
+
+Visualize the model
+```{r}
+plot(nba_nn, show.weights = F, col.entry = "red", col.hidden = "green", col.out = "blue", information = F)
+```
+Predict on Test Set
+```{r}
+test_pred = compute(nba_nn, test_set)
+
+# Run sign activation function on the results of the output layer
+binary_test <- sign.act.fct(test_pred$net.result)
+
+# Lets see our accuracy
+test_v <- table(test_set$AllStar, binary_test)
+cat("Test Accuracy: ", (test_v[1] + test_v[4]) / length(binary_test), "\n")
+
+# Classify our full dataset
+full_pred = compute(nba_nn, current_season_set)
+
+binary_full <- sign.act.fct(full_pred$net.result)
+
+full_v <- table(current_season_set$AllStar, binary_full)
+cat("Current Season Accuracy 2020-2021: ", (full_v[1] + full_v[4]) / length(binary_full))
+
+```
+```{r}
+#prune <- labeled_players %>% select(playerName, AllStar)
+prune <- current_season_set
+prune$ANNPrediction <- binary_full
+
+# Who the ANN said shouldn't be all stars
+miss_classified <- prune %>% filter(prune$AllStar == 1)
+miss_classified <- miss_classified %>% filter(miss_classified$ANNPrediction == 0)
+miss_classified
+
+# Who the ANN said should be all stars
+snubs <- prune %>% filter(prune$AllStar == 0)
+snubs <- snubs %>% filter(snubs$ANNPrediction == 1)
+snubs
+```
+```{r}
+weights <- neuralweights(nba_nn)
+w_df <- data.frame(weights[2]$wts$`hidden 1 1`, weights[2]$wts$`hidden 1 2`, weights[2]$wts$`hidden 1 3`, weights[2]$wts$`hidden 1 4`, weights[2]$wts$`hidden 1 5`, weights[2]$wts$`hidden 1 6`, weights[2]$wts$`hidden 1 7`, weights[2]$wts$`hidden 1 8`)
+
+emph <- rbind.data.frame(rowMeans(w_df))
+
+tmp <- current_season_set[, -1]
+tmp <- tmp[, -12]
+names(emph) <- names(tmp)
+
+t1 <- rowMeans(w_df)
+
+cat("Top 5 Emphasized Variables when determining an All Star Player\n\n")
+cat("Variable : Weight\n-----------------\n")
+for (weight1 in head(t1[order(-t1)], 5)) {
+  i <- 1
+  for (weight2 in emph[1,]) {
+    if (weight1 == weight2) {
+      cat(names(emph)[i], ": ", weight1, "\n")  
+    }
+    i <- i + 1
+  }
+}
+```
+Graphic
+```{r}
+
+#download.file(toString(playerImgs[1, 2]), 'test.png', mode = "wb")
+#jj <- readPNG("test.png", native=T)
+#jg <- readPNG("test.png", native=T)
+#plot(c(0, 20), c(0, 5), type="n")
+#rasterImage(jj, 0, 2, 5, 4)
+#rasterImage(jj, 5, 2, 10, 4)
+
+xleft <- 0
+xright <- 5
+
+generateLineup <- function(roster, imageDB) {
+  display <- list()
+  
+  for (player1 in 1:nrow(roster)) {
+    for (player2 in 1:nrow(playerImgs)) {
+      if(roster[player1, "playerName"] == imageDB[player2,"pull_stats2.namePlayer"]) {
+        download.file(toString(imageDB[player2, 'pull_stats2.urlPlayerHeadshot']), gsub(" ", "", paste(toString(imageDB[player2,"pull_stats2.namePlayer"]), ".png")), mode = "wb")
+        display[[toString(roster[player1, "playerName"])]] <- gsub(" ", "", paste(toString(imageDB[player2,"pull_stats2.namePlayer"]), ".png"))
+        break
+      }
+    }
+  }
+  return(display)
+}
+
+dis_snubs <- generateLineup(snubs, playerImgs)
+dis_mis <- generateLineup(miss_classified, playerImgs)
+
+```
+
+Display the players classified through ANN
+------------------------------------------
+
+Display Players that were snubbed from the All Star Game
+```{r}
+for(img in dis_snubs) {
+  plot(c(0, 10), c(0, 10), type="n", ann=T,axes=FALSE, main = gsub(".png", "",img), xlab = "", ylab = "")
+  rasterImage(readPNG(img, native=T), 3.1, 4, 7.1, 10)
+}
+```
+
+Display All Stars that were classified as non-allstars
+```{r}
+for(img in dis_mis) {
+  plot(c(0, 10), c(0, 10), type="n", ann=T,axes=FALSE, main = gsub(".png", "",img), xlab = "", ylab = "")
+  rasterImage(readPNG(img, native=T), 3.1, 4, 7.1, 10)
+}
+```
+Clean
+```{r}
+for (img in dis_snubs) {
+  file.remove(img)
+}
+for (img in dis_mis) {
+  file.remove(img)
+}
+```
+
